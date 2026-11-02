@@ -1,0 +1,185 @@
+const FEATURE_NAMES = ['steam', 'classReminder', 'vjudgeContest', 'vjudgeProgress', 'freechat', 'shutup'];
+
+const DEFAULTS = {
+  enabled: true,
+  steam: { enabled: false, apiKey: '', watchList: {}, privateList: {}, reportGroup: 0, bindGroups: [], dealsIntervalSec: 1800, summaryWeekday: 1, summaryHour: 20 },
+  classReminder: { enabled: false, groupId: 0, leadMin: 10, week1Monday: '2026-08-31', schedules: {}, builtinHolidays: [['2026-10-01', '2026-10-07', '国庆节'], ['2027-01-01', '2027-01-03', '元旦']] },
+  vjudgeContest: { enabled: false, contestId: '848881', targetUmo: '', monitorEnabled: false, pollIntervalSec: 60, reportIntervalSec: 600 },
+  vjudgeProgress: { enabled: false, workbookId: '20406', totalProblems: 50, rosterIntervalSec: 1800, missThreshold: 2, guardRatio: 0.5 },
+  freechat: { enabled: false, groups: [], probability: 0.2, mentionProbability: 0.85, cooldownSec: 900, mentionCooldownSec: 300 },
+  shutup: { enabled: false, muteSeconds: 600, triggerKeywords: ['闭嘴', '别说了', '安静'] },
+};
+
+function mergeDefaults(user, defs) {
+  const out = { ...defs };
+  for (const k of Object.keys(user || {})) {
+    if (user[k] && typeof user[k] === 'object' && !Array.isArray(user[k]) && defs[k] && typeof defs[k] === 'object' && !Array.isArray(defs[k])) {
+      out[k] = mergeDefaults(user[k], defs[k]);
+    } else {
+      out[k] = user[k];
+    }
+  }
+  return out;
+}
+
+function featureLabel(key) {
+  const labels = {
+    steam: 'Steam 监控',
+    classReminder: '课表提醒',
+    vjudgeContest: 'VJudge 比赛监控',
+    vjudgeProgress: 'VJudge 题单进度',
+    freechat: '免@自动聊天',
+    shutup: '闭嘴开关',
+  };
+  return labels[key] || key;
+}
+
+let currentConfig = mergeDefaults({}, DEFAULTS);
+const runtime = {};
+for (const key of FEATURE_NAMES) {
+  runtime[key] = { enabled: false, started: false };
+}
+
+function makeOutput() {
+  return {
+    schema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string' },
+      },
+      required: ['text'],
+    },
+    render: function (result) {
+      return { content: [{ type: 'text', text: result.text }] };
+    },
+  };
+}
+
+function apply(ctx, config) {
+  currentConfig = mergeDefaults(config || {}, DEFAULTS);
+  for (const key of FEATURE_NAMES) {
+    runtime[key].enabled = !!(currentConfig[key] && currentConfig[key].enabled);
+  }
+
+  const disposers = [];
+
+  for (const key of FEATURE_NAMES) {
+    const toggle = {
+      name: 'qqbot_' + key + '_toggle',
+      title: '切换 ' + featureLabel(key),
+      description: '启用或禁用 ' + featureLabel(key) + ' 功能',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          enable: { type: 'boolean', description: 'true=启用，false=禁用' },
+        },
+        required: ['enable'],
+      },
+      output: makeOutput(),
+      execute: async function (args) {
+        const enable = args.enable === true;
+        runtime[key].enabled = enable;
+        currentConfig = mergeDefaults(
+          { ...currentConfig, [key]: { ...(currentConfig[key] || {}), enabled: enable } },
+          DEFAULTS,
+        );
+        return {
+          content: [{ type: 'text', text: enable ? ('✅ ' + featureLabel(key) + ' 已启用') : ('⏹️ ' + featureLabel(key) + ' 已禁用') }],
+        };
+      },
+    };
+    if (typeof ctx.tools.register === 'function') {
+      disposers.push(ctx.tools.register(toggle));
+    }
+  }
+
+  if (typeof ctx.tools.register === 'function') {
+    disposers.push(
+      ctx.tools.register({
+        name: 'qqbot_status',
+        title: 'QQBot 状态',
+        description: '查看 QQBot SkillPack 各功能启用/运行状态',
+        inputSchema: { type: 'object', properties: {} },
+        output: makeOutput(),
+        execute: async function () {
+          const lines = [currentConfig.enabled ? 'QQBot SkillPack 总开关：已启用' : 'QQBot SkillPack 总开关：已禁用'];
+          for (const key of FEATURE_NAMES) {
+            const r = runtime[key];
+            const on = r.enabled && currentConfig.enabled;
+            lines.push('  ' + featureLabel(key) + '：' + (on ? '启用' : '禁用') + ' ' + (r.started ? '(已运行)' : '(未启动)'));
+          }
+          return { content: [{ type: 'text', text: lines.join('\n') }] };
+        },
+      }),
+    );
+
+    disposers.push(
+      ctx.tools.register({
+        name: 'qqbot_set_config',
+        title: '设置 QQBot 配置',
+        description: '更新 QQBot SkillPack 的配置项（通过 Loader 持久化）',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            key: { type: 'string', description: '配置键，如 steam.apiKey 或 classReminder.groupId' },
+            value: { description: '新值' },
+          },
+          required: ['key', 'value'],
+        },
+        output: makeOutput(),
+        execute: async function (args) {
+          const next = JSON.parse(JSON.stringify(currentConfig));
+          const parts = args.key.split('.');
+          let cur = next;
+          for (let i = 0; i < parts.length - 1; i++) {
+            cur[parts[i]] = cur[parts[i]] || {};
+            cur = cur[parts[i]];
+          }
+          cur[parts[parts.length - 1]] = args.value;
+          try {
+            currentConfig = mergeDefaults(next, DEFAULTS);
+            for (const k of FEATURE_NAMES) {
+              runtime[k].enabled = !!(currentConfig[k] && currentConfig[k].enabled);
+            }
+            return { content: [{ type: 'text', text: '✅ 配置已更新：' + args.key }] };
+          } catch (e) {
+            return { content: [{ type: 'text', text: '❌ 配置无效：' + e.message }], isError: true };
+          }
+        },
+      }),
+    );
+  }
+
+  disposers.push(
+    ctx.effect(function () {
+      for (const key of FEATURE_NAMES) {
+        const shouldRun = currentConfig.enabled && runtime[key].enabled;
+        if (shouldRun && !runtime[key].started) {
+          runtime[key].started = true;
+          console.log('[qqbot-skillpack] ' + featureLabel(key) + ' 启用');
+        } else if (!shouldRun && runtime[key].started) {
+          runtime[key].started = false;
+          console.log('[qqbot-skillpack] ' + featureLabel(key) + ' 禁用');
+        }
+      }
+      return function () {
+        for (const key of FEATURE_NAMES) {
+          runtime[key].started = false;
+        }
+      };
+    }),
+  );
+
+  return function () {
+    for (const d of disposers) {
+      try {
+        d();
+      } catch {}
+    }
+  };
+}
+
+module.exports = {
+  apply,
+  inject: ['tools'],
+};

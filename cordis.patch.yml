@@ -1,0 +1,60 @@
+- insert:
+    - id: qqbot-skillpack
+      name: '@local/qqbot-skillpack'
+      config:
+        enabled: true
+        bot:
+          name: ''
+          workspacePath: ''
+          httpEndpoint: ''
+          selfQQ: 0
+        autoAdapt:
+          enabled: false
+        groups: []
+        steam:
+          enabled: false
+          apiKey: ''
+          watchList: {}
+          privateList: {}
+          reportGroup: 0
+          bindGroups: []
+          dealsIntervalSec: 1800
+          summaryWeekday: 1
+          summaryHour: 20
+        classReminder:
+          enabled: false
+          groupId: 0
+          leadMin: 10
+          week1Monday: '2026-08-31'
+          schedules: {}
+          builtinHolidays:
+            - ['2026-10-01', '2026-10-07', '国庆节']
+            - ['2027-01-01', '2027-01-03', '元旦']
+        vjudgeContest:
+          enabled: false
+          contestId: '848881'
+          targetUmo: ''
+          monitorEnabled: false
+          pollIntervalSec: 60
+          reportIntervalSec: 600
+        vjudgeProgress:
+          enabled: false
+          workbookId: '20406'
+          totalProblems: 50
+          rosterIntervalSec: 1800
+          missThreshold: 2
+          guardRatio: 0.5
+        freechat:
+          enabled: false
+          groups: []
+          probability: 0.20
+          mentionProbability: 0.85
+          cooldownSec: 900
+          mentionCooldownSec: 300
+        shutup:
+          enabled: false
+          muteSeconds: 600
+          triggerKeywords:
+            - '闭嘴'
+            - '别说了'
+            - '安静'

@@ -1,0 +1,4 @@
+name: astrbot_plugin_dsh_control
+desc: DSH 群聊参数控制（实时读取 qqbot_groups.json）
+version: 0.1.0
+author: dsh
