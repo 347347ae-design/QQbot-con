@@ -1,0 +1,4 @@
+node_modules/
+data/
+*.bak-before-parameters-fix
+.DS_Store

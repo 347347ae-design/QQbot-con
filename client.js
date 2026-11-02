@@ -6,9 +6,9 @@ window.__ModuleLoader__.load({
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 		const React = require("react");
 		const h = React.createElement;
-		const CURRENT_VERSION = '1.17.0';
+		const CURRENT_VERSION = '1.18.1';
 
-		const API = "/qqbot-skillpack/api/v16";
+		const API = "/qqbot-skillpack/api/v18";
 
 		const S = {
 			wrap: { width: "100%", maxWidth: 860, color: "#1f2329", padding: "4px 0" },

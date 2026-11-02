@@ -1313,7 +1313,7 @@ export function apply(ctx, config) {
     if (server && typeof server.register === 'function') {
       disposers.push(server.register({
         kind: 'exact',
-        path: '/qqbot-skillpack/api/v16',
+        path: '/qqbot-skillpack/api/v18',
         handler: async (req, res) => {
           const send = (code, payload) => {
             try {
@@ -1510,6 +1510,23 @@ export function apply(ctx, config) {
             send(200, { ok: true, groups: Array.from(merged.values()), endpointTried: endpoint });
             return;
           }
+          if (action === 'check_update') {
+            try {
+              const info = await checkUpdate();
+              send(200, {
+                ok: true,
+                currentVersion: info.currentVersion,
+                latestVersion: info.latestVersion,
+                updateAvailable: info.updateAvailable,
+                downloadUrl: info.downloadUrl,
+                changelog: info.changelog,
+                error: info.error,
+              });
+            } catch (e) {
+              send(200, { ok: false, error: '检查更新失败：' + String((e && e.message) || e) });
+            }
+            return;
+          }
           const target = String(body.path || '').trim();
           if (!target) {
             send(400, { ok: false, error: 'path required' });
@@ -1614,22 +1631,6 @@ export function apply(ctx, config) {
             send(200, { ok: true, ...detection, applied: true, persisted, autoConnect });
             return;
           }
-          if (action === 'check_update') {
-            try {
-              const info = await checkUpdate();
-              send(200, {
-                ok: true,
-                currentVersion: info.currentVersion,
-                latestVersion: info.latestVersion,
-                updateAvailable: info.updateAvailable,
-                downloadUrl: info.downloadUrl,
-                changelog: info.changelog,
-              });
-            } catch (e) {
-              send(200, { ok: false, error: '检查更新失败：' + String((e && e.message) || e) });
-            }
-            return;
-          }
           send(400, { ok: false, error: 'unknown action: ' + action });
         },
       }));
@@ -1666,9 +1667,9 @@ export function apply(ctx, config) {
 
 // ---------- 自动检查更新 ----------
 
-const PLUGIN_REPO_OWNER = 'DeepSeekHarness';
-const PLUGIN_REPO_NAME = 'qqbot-skillpack';
-const CURRENT_VERSION = '1.17.0';
+const PLUGIN_REPO_OWNER = '347347ae-design';
+const PLUGIN_REPO_NAME = 'QQbot-con';
+const CURRENT_VERSION = '1.18.1';
 
 function parseVersion(v) {
   const parts = String(v || '0').split('.').map(x => parseInt(x, 10) || 0);
@@ -1699,10 +1700,11 @@ async function fetchJson(url, timeoutMs = 15000) {
 }
 
 async function checkUpdate() {
+  const repoUrl = `https://github.com/${PLUGIN_REPO_OWNER}/${PLUGIN_REPO_NAME}`;
   try {
     const releases = await fetchJson(`https://api.github.com/repos/${PLUGIN_REPO_OWNER}/${PLUGIN_REPO_NAME}/releases/latest`);
     const latestVersion = String(releases.tag_name || releases.name || '').replace(/^v/, '') || '0.0.0';
-    const downloadUrl = releases.html_url || `https://github.com/${PLUGIN_REPO_OWNER}/${PLUGIN_REPO_NAME}/releases/latest`;
+    const downloadUrl = releases.html_url || `${repoUrl}/releases/latest`;
     const changelog = releases.body || '';
     return {
       currentVersion: CURRENT_VERSION,
@@ -1711,15 +1713,28 @@ async function checkUpdate() {
       downloadUrl,
       changelog,
     };
-  } catch (e) {
-    return {
-      currentVersion: CURRENT_VERSION,
-      latestVersion: null,
-      updateAvailable: false,
-      downloadUrl: `https://github.com/${PLUGIN_REPO_OWNER}/${PLUGIN_REPO_NAME}/releases/latest`,
-      changelog: null,
-      error: String((e && e.message) || e),
-    };
+  } catch (firstError) {
+    // 仓库还没有 release 时，回退到读取 main 分支 package.json 的版本
+    try {
+      const raw = await fetchJson(`https://raw.githubusercontent.com/${PLUGIN_REPO_OWNER}/${PLUGIN_REPO_NAME}/main/package.json`);
+      const latestVersion = String((raw && raw.version) || '0.0.0');
+      return {
+        currentVersion: CURRENT_VERSION,
+        latestVersion,
+        updateAvailable: versionGt(latestVersion, CURRENT_VERSION),
+        downloadUrl: repoUrl,
+        changelog: null,
+      };
+    } catch (e) {
+      return {
+        currentVersion: CURRENT_VERSION,
+        latestVersion: null,
+        updateAvailable: false,
+        downloadUrl: repoUrl,
+        changelog: null,
+        error: String((e && e.message) || (firstError && firstError.message) || e),
+      };
+    }
   }
 }
 
