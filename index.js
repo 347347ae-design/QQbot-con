@@ -1597,7 +1597,21 @@ export function apply(ctx, config) {
             } catch (e) {
               detection.notes.push('持久化失败：' + String((e && e.message) || e));
             }
-            send(200, { ok: true, ...detection, applied: true, persisted });
+
+            // 自动尝试连接 OneBot（如果识别到端点）
+            let autoConnect = null;
+            const ep = currentConfig.bot && currentConfig.bot.httpEndpoint;
+            const tk = currentConfig.bot && currentConfig.bot.token;
+            if (ep) {
+              try {
+                const r = await bindOneBotAndFill(ep, tk, [], false);
+                autoConnect = { ok: true, login: r.login, groups: r.groups || [] };
+              } catch (e) {
+                autoConnect = { ok: false, error: String((e && e.message) || e) };
+              }
+            }
+
+            send(200, { ok: true, ...detection, applied: true, persisted, autoConnect });
             return;
           }
           if (action === 'check_update') {

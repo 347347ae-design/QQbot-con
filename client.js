@@ -151,7 +151,12 @@ window.__ModuleLoader__.load({
 					if (Array.isArray(f.groupIds) && f.groupIds.length) bits.push("识别到 " + f.groupIds.length + " 个群");
 					bits.push(r.persisted ? "已保存" : "未持久化");
 					const notes = Array.isArray(r.notes) && r.notes.length ? "｜" + r.notes.join("；") : "";
-					setMsg("✅ " + bits.join(" · ") + notes);
+					const ac = r.autoConnect;
+					if (ac && ac.ok) {
+						setMsg("✅ 已自动绑定：" + (ac.login.name || f.name || "(未命名)") + " · QQ " + (ac.login.selfQQ || f.selfQQ || "?") + " · 群 " + (ac.groups || []).length + " 个 · 已保存");
+					} else {
+						setMsg("✅ " + bits.join(" · ") + notes);
+					}
 					await reload().then((s) => { if (s) loadGroups(s); });
 				} catch (e) {
 					setMsg("识别失败：" + String((e && e.message) || e));
