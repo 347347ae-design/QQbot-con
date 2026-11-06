@@ -243,7 +243,11 @@ window.__ModuleLoader__.load({
 				}
 			};
 
-			React.useEffect(() => { reload().then((s) => { if (s) loadGroups(s); }); checkUpdate(); loadMarket(); }, []);
+			React.useEffect(() => { 
+				reload().then((s) => { if (s) loadGroups(s); }).catch(() => {}); 
+				checkUpdate(); 
+				loadMarket(); 
+			}, []);
 
 			const bot = state.bot || {};
 			const remote = state.remote || {};
@@ -666,7 +670,7 @@ window.__ModuleLoader__.load({
 						),
 						!installSpec ? h("span", { style: { fontSize: 12.5, color: "#6b7280" } }, "粘贴 Git 地址后点安装") : null,
 					),
-					marketMsg ? h("div", { style: marketMsg.startsWith("❌") || marketMsg.startsWith("🗑️") || marketMsg.startsWith("🔄") || marketMsg.startsWith("✅") ? marketMsg.startsWith("❌") || marketMsg.startsWith("安装失败") || marketMsg.startsWith("卸载失败") || marketMsg.startsWith("切换失败") || marketMsg.startsWith("获取市场失败") || marketMsg.startsWith("同步失败") ? S.err : S.ok : S.ok }, marketMsg) : null,
+					marketMsg ? h("div", { style: marketMsg.startsWith("❌") || marketMsg.startsWith("安装失败") || marketMsg.startsWith("卸载失败") || marketMsg.startsWith("切换失败") || marketMsg.startsWith("获取市场失败") || marketMsg.startsWith("同步失败") ? S.err : S.ok }, marketMsg) : null,
 					h("h3", { style: { margin: "16px 0 8px", fontSize: 14, color: "#374151" } }, "已安装插件"),
 					myPlugins.length === 0 ? h("p", { style: { color: "#6b7280", fontSize: 13 } }, "暂无已安装插件。") :
 						h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
