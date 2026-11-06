@@ -1527,6 +1527,35 @@ export function apply(ctx, config) {
             }
             return;
           }
+          if (action === 'send_group_msg') {
+            const endpoint = String(body.endpoint || (currentConfig.bot && currentConfig.bot.httpEndpoint) || '').trim();
+            const token = String(body.token !== undefined ? body.token : (currentConfig.bot && currentConfig.bot.token) || '');
+            const groupId = body.groupId !== undefined ? String(body.groupId).trim() : '';
+            const message = String(body.message || '');
+            if (!endpoint) {
+              send(400, { ok: false, error: '请先填写 OneBot HTTP 端点' });
+              return;
+            }
+            if (!groupId) {
+              send(400, { ok: false, error: 'groupId 不能为空' });
+              return;
+            }
+            if (!message) {
+              send(400, { ok: false, error: 'message 不能为空' });
+              return;
+            }
+            try {
+              const data = await onebotCall(endpoint, token, 'send_group_msg', {
+                group_id: parseInt(groupId, 10) || 0,
+                message,
+                auto_escape: false,
+              });
+              send(200, { ok: true, data });
+            } catch (e) {
+              send(200, { ok: false, error: '发送失败：' + String((e && e.message) || e) });
+            }
+            return;
+          }
           const target = String(body.path || '').trim();
           if (!target) {
             send(400, { ok: false, error: 'path required' });
@@ -1669,7 +1698,7 @@ export function apply(ctx, config) {
 
 const PLUGIN_REPO_OWNER = '347347ae-design';
 const PLUGIN_REPO_NAME = 'QQbot-con';
-const CURRENT_VERSION = '1.18.1';
+const CURRENT_VERSION = '1.18.2';
 
 function parseVersion(v) {
   const parts = String(v || '0').split('.').map(x => parseInt(x, 10) || 0);
