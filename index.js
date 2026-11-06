@@ -485,18 +485,29 @@ async function onebotCall(endpoint, token, action, params = {}) {
   return j && j.data !== undefined ? j.data : j;
 }
 
-async function fetchGroupList(endpoint) {
+async function fetchGroupList(endpoint, token) {
   if (!endpoint) return [];
-  const base = /^https?:\/\//i.test(endpoint) ? endpoint : 'http://' + endpoint;
   try {
-    const r = await fetch(base.replace(/\/+$/, '') + '/get_group_list', { signal: AbortSignal.timeout(2500) });
-    if (!r.ok) return [];
-    const j = await r.json();
-    const list = (j && j.data) || [];
+    // Use onebotCall for proper POST + auth token support
+    const data = await onebotCall(endpoint, token || '', 'get_group_list', {});
+    const list = Array.isArray(data) ? data : (data && Array.isArray(data.data) ? data.data : []);
     if (!Array.isArray(list)) return [];
     return list.map((g) => ({ id: String(g.group_id), name: String(g.group_name || ''), sources: ['onebot'] }));
   } catch {
-    return [];
+    // Fallback: try GET without auth (some setups)
+    try {
+      const base = /^https?:\/\//i.test(endpoint) ? endpoint : 'http://' + endpoint;
+      const headers = {};
+      if (token) headers.authorization = 'Bearer ' + token;
+      const r = await fetch(base.replace(/\/+$/, '') + '/get_group_list', { headers, signal: AbortSignal.timeout(3500) });
+      if (!r.ok) return [];
+      const j = await r.json();
+      const list = (j && j.data) || (Array.isArray(j) ? j : []);
+      if (!Array.isArray(list)) return [];
+      return list.map((g) => ({ id: String(g.group_id), name: String(g.group_name || ''), sources: ['onebot'] }));
+    } catch {
+      return [];
+    }
   }
 }
 
@@ -1645,7 +1656,8 @@ export function apply(ctx, config) {
             const rootPath = String(body.path || (currentConfig.bot && currentConfig.bot.workspacePath) || '').trim();
             const local = rootPath && fs.existsSync(rootPath) ? discoverGroups(rootPath) : [];
             const endpoint = String(body.endpoint || (currentConfig.bot && currentConfig.bot.httpEndpoint) || '').trim();
-            const remote = await fetchGroupList(endpoint);
+            const token = String(body.token !== undefined ? body.token : (currentConfig.bot && currentConfig.bot.token) || '');
+            const remote = await fetchGroupList(endpoint, token);
             const merged = new Map();
             for (const g of local) merged.set(g.id, { id: g.id, name: g.name || '', sources: (g.sources || []).slice() });
             for (const g of remote) {
@@ -1983,7 +1995,7 @@ export function apply(ctx, config) {
 
 const PLUGIN_REPO_OWNER = '347347ae-design';
 const PLUGIN_REPO_NAME = 'QQbot-con';
-const CURRENT_VERSION = '1.20.0';
+const CURRENT_VERSION = '1.21.0';
 
 function parseVersion(v) {
   const parts = String(v || '0').split('.').map(x => parseInt(x, 10) || 0);

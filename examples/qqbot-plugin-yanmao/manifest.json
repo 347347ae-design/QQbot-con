@@ -1,0 +1,8 @@
+{
+  "id": "qqbot-plugin-yanmao",
+  "name": "烟猫运维助手",
+  "version": "1.0.0",
+  "description": "面向烟猫机器人的 DSH 侧运维插件：检查 OneBot 连通性、查看群规则摘要、手动同步规则到 AstrBot、发送测试消息。",
+  "author": "QQbot-con",
+  "entry": "index.js"
+}

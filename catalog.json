@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-06T09:50:00Z",
+  "updatedAt": "2026-11-06T14:50:00Z",
   "plugins": [
     {
       "id": "qqbot-plugin-hello",
@@ -8,6 +8,14 @@
       "description": "演示市场插件：注册一个 hello_echo 工具，把输入文本原样返回。",
       "author": "QQbot-con",
       "source": "examples/qqbot-plugin-hello"
+    },
+    {
+      "id": "qqbot-plugin-yanmao",
+      "name": "烟猫运维助手",
+      "version": "1.0.0",
+      "description": "面向烟猫机器人的 DSH 运维插件：检查 OneBot 连通性、查看群列表、发送测试消息（yanmao_status/yanmao_groups/yanmao_send_group）。",
+      "author": "QQbot-con",
+      "source": "examples/qqbot-plugin-yanmao"
     }
   ]
 }

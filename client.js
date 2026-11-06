@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 		const React = require("react");
 		const h = React.createElement;
-		const CURRENT_VERSION = '1.20.0';
+		const CURRENT_VERSION = '1.21.0';
 
 		const API = "/qqbot-skillpack/api/v18";
 
@@ -93,7 +93,7 @@ window.__ModuleLoader__.load({
 			const loadGroups = async (stateArg) => {
 				const cur = stateArg || state;
 				try {
-					const r = await post({ action: "groups", path: (cur.bot && cur.bot.workspacePath) || "", endpoint: (cur.bot && cur.bot.httpEndpoint) || "" });
+					const r = await post({ action: "groups", path: (cur.bot && cur.bot.workspacePath) || "", endpoint: (cur.bot && cur.bot.httpEndpoint) || "", token: (cur.bot && cur.bot.token) || "" });
 					if (r && r.ok === true) setDiscovered(Array.isArray(r.groups) ? r.groups : []);
 				} catch (e) {
 					setMsg("群聊发现失败：" + String((e && e.message) || e));
@@ -599,7 +599,7 @@ window.__ModuleLoader__.load({
 								h("td", { style: S.td }, h("input", { type: "number", step: "0.05", min: "0", max: "1", value: String(g.probability ?? 0.2), style: { ...S.input, minWidth: 70, width: 70 }, onChange: (e) => { setPath(["groups", i, "probability"], Number(e.target.value) || 0, false); setDirty(true); } })),
 								h("td", { style: S.td }, h("input", { type: "number", step: "0.05", min: "0", max: "1", value: String(g.mentionProbability ?? 0.85), style: { ...S.input, minWidth: 70, width: 70 }, onChange: (e) => { setPath(["groups", i, "mentionProbability"], Number(e.target.value) || 0, false); setDirty(true); } })),
 								h("td", { style: S.td }, h("input", { type: "number", step: "30", min: "0", value: String(g.cooldownSec ?? 900), style: { ...S.input, minWidth: 80, width: 80 }, onChange: (e) => { setPath(["groups", i, "cooldownSec"], Number(e.target.value) || 0, false); setDirty(true); } })),
-								h("td", { style: S.td }, h("input", { value: (g.muteKeywords || []).join(","), style: { ...S.input, minWidth: 120, width: 120 }, onChange: (e) => { setPath(["groups", i, "muteKeywords"], e.target.value.split(",").map((x) => x.trim()).filter(Boolean), false); setDirty(true); } })),
+								h("td", { style: S.td }, h("input", { value: (Array.isArray(g.muteKeywords) ? g.muteKeywords : (g.muteKeywords ? [String(g.muteKeywords)] : [])).join(","), style: { ...S.input, minWidth: 120, width: 120 }, onChange: (e) => { setPath(["groups", i, "muteKeywords"], e.target.value.split(",").map((x) => x.trim()).filter(Boolean), false); setDirty(true); } })),
 								h("td", { style: S.td }, h("button", { type: "button", style: S.btnDanger, onClick: () => removeGroup(i) }, "删除")),
 							))),
 						),
