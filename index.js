@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const PLUGIN_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -67,7 +67,8 @@ const FEATURE_NAMES = ['steam', 'classReminder', 'vjudgeContest', 'vjudgeProgres
 
 const PLUGIN_MARKET_DIR = path.join(PLUGIN_DIR, 'market');
 const MARKET_INDEX_FILE = path.join(PLUGIN_MARKET_DIR, 'index.json');
-const MARKET_REMOTE_INDEX_URL = 'https://raw.githubusercontent.com/347347ae-design/QQbot-market/main/index.json';
+const MARKET_REMOTE_CACHE_FILE = path.join(PLUGIN_MARKET_DIR, 'remote.json');
+const MARKET_REMOTE_INDEX_URL = 'https://raw.githubusercontent.com/347347ae-design/QQbot-con/main/catalog.json';
 
 const DEFAULTS = {
   enabled: true,
@@ -125,6 +126,53 @@ function makeOutput() {
 
 // ---------- 插件市场：Host 侧管理 QQBot 插件的安装/启用/禁用/卸载 ----------
 
+// 市场插件运行时：保存宿主 ctx 与已加载插件的清理函数
+const marketRuntime = { ctx: null, loaded: new Map() };
+const marketDisposers = [];
+
+async function loadMarketPlugin(entry) {
+  const ctx = marketRuntime.ctx;
+  if (!ctx) return { ok: false, error: '插件上下文未就绪' };
+  const id = String(entry && entry.id || '');
+  if (!id) return { ok: false, error: '缺少插件 id' };
+  if (marketRuntime.loaded.has(id)) return { ok: true, alreadyLoaded: true };
+  const dir = pluginDir(id);
+  const manifest = readJsonFile(path.join(dir, 'manifest.json'), null) || {};
+  const entryFile = String(manifest.entry || 'index.js');
+  const entryPath = path.join(dir, entryFile);
+  if (!fs.existsSync(entryPath)) return { ok: false, error: '缺少入口文件 ' + entryFile };
+  try {
+    const mod = await import(pathToFileURL(entryPath).href + '?t=' + Date.now());
+    const plugin = mod.default || mod;
+    if (!plugin || typeof plugin.apply !== 'function') {
+      return { ok: false, error: '入口未导出 apply(ctx, config)' };
+    }
+    const ret = await plugin.apply(ctx, (entry && entry.config) || {});
+    const ds = [];
+    if (typeof ret === 'function') ds.push(ret);
+    else if (Array.isArray(ret)) {
+      for (const d of ret) if (typeof d === 'function') ds.push(d);
+    }
+    marketRuntime.loaded.set(id, ds);
+    for (const d of ds) marketDisposers.push(d);
+    console.log('[qqbot-skillpack] 市场插件已加载：' + id + ' v' + (manifest.version || '?'));
+    return { ok: true, loaded: true };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
+function disposeMarketPlugin(id) {
+  const ds = marketRuntime.loaded.get(id);
+  if (!ds) return false;
+  for (const d of ds) {
+    try { d(); } catch {}
+  }
+  marketRuntime.loaded.delete(id);
+  console.log('[qqbot-skillpack] 市场插件已卸载运行：' + id);
+  return true;
+}
+
 function ensureMarketDir() {
   try { fs.mkdirSync(PLUGIN_MARKET_DIR, { recursive: true }); } catch {}
 }
@@ -154,8 +202,22 @@ function pluginDir(pluginId) {
 async function fetchRemoteMarketIndex() {
   try {
     const r = await fetch(MARKET_REMOTE_INDEX_URL, { signal: AbortSignal.timeout(10000) });
-    if (!r.ok) return null;
-    const j = await r.json();
+    if (r.ok) {
+      const j = await r.json();
+      if (j && Array.isArray(j.plugins)) {
+        // 成功则缓存到本地，网络不通时仍可展示
+        try {
+          ensureMarketDir();
+          fs.writeFileSync(MARKET_REMOTE_CACHE_FILE, JSON.stringify(j, null, 2), 'utf-8');
+        } catch {}
+        return j;
+      }
+    }
+  } catch {}
+  // 回退到本地缓存
+  try {
+    const raw = fs.readFileSync(MARKET_REMOTE_CACHE_FILE, 'utf-8');
+    const j = JSON.parse(raw);
     if (j && Array.isArray(j.plugins)) return j;
   } catch {}
   return null;
@@ -1682,15 +1744,33 @@ export function apply(ctx, config) {
                 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
               }
             } else {
-              send(400, { ok: false, error: '暂仅支持 Git URL 安装，如 https://github.com/xxx/yyy.git' });
-              return;
+              // 本地目录安装：spec 可为绝对路径，或相对插件目录的路径（如 examples/xxx）
+              const localDir = path.isAbsolute(spec) ? spec : path.resolve(PLUGIN_DIR, spec);
+              if (!fs.existsSync(localDir) || !fs.statSync(localDir).isDirectory()) {
+                send(400, { ok: false, error: '路径不存在且不是 Git 地址：' + spec });
+                return;
+              }
+              manifest = readJsonFile(path.join(localDir, 'manifest.json'), null);
+              if (!manifest) { send(200, { ok: false, error: '目录中没有 manifest.json' }); return; }
+              pluginId = String(manifest.id || manifest.name || '').replace(/[^a-z0-9_-]/gi, '_');
+              if (!pluginId) { send(200, { ok: false, error: 'manifest.json 缺少 id/name' }); return; }
+              const targetDir = pluginDir(pluginId);
+              if (fs.existsSync(targetDir)) { send(200, { ok: false, error: '插件已安装：' + pluginId }); return; }
+              fs.cpSync(localDir, targetDir, { recursive: true, dereference: true });
+              files = validatePluginFiles(targetDir);
+              name = manifest.name || pluginId;
+              version = manifest.version || '0.0.0';
+              description = manifest.description || '';
+              author = manifest.author || 'unknown';
             }
             const entry = normalizePluginEntry({ id: pluginId, name, version, description, author, source: spec, enabled: true });
             const index = loadMarketIndex();
             if (index.plugins.some((p) => p.id === pluginId)) { send(200, { ok: false, error: '插件已存在：' + pluginId }); return; }
             index.plugins.push({ ...entry, installedAt: new Date().toISOString() });
             saveMarketIndex(index);
-            send(200, { ok: true, plugin: { ...entry, installed: true, manifest }, files });
+            // 立即加载，无需重启
+            const loaded = await loadMarketPlugin(entry);
+            send(200, { ok: true, plugin: { ...entry, installed: true, manifest }, files, loaded: loaded.ok, loadError: loaded.ok ? undefined : loaded.error });
             return;
           }
           if (action === 'market_remove') {
@@ -1698,6 +1778,7 @@ export function apply(ctx, config) {
             if (!pluginId) { send(400, { ok: false, error: 'id 不能为空' }); return; }
             const targetDir = pluginDir(pluginId);
             let removed = false;
+            disposeMarketPlugin(pluginId);
             if (fs.existsSync(targetDir)) {
               try { fs.rmSync(targetDir, { recursive: true, force: true }); removed = true; } catch {}
             }
@@ -1717,15 +1798,26 @@ export function apply(ctx, config) {
             if (!p) { send(400, { ok: false, error: '插件未安装：' + pluginId }); return; }
             p.enabled = enabled;
             saveMarketIndex(index);
-            send(200, { ok: true, id: pluginId, enabled });
+            let loaded = null;
+            let loadError = null;
+            if (enabled) {
+              const r = await loadMarketPlugin(p);
+              loaded = r.ok;
+              if (!r.ok) loadError = r.error;
+            } else {
+              disposeMarketPlugin(pluginId);
+            }
+            send(200, { ok: true, id: pluginId, enabled, loaded, loadError });
             return;
           }
           if (action === 'market_sync') {
             const remote = await fetchRemoteMarketIndex();
             if (!remote) { send(200, { ok: false, error: '无法获取远程市场索引' }); return; }
-            // 把远程索引写入本地作为可选源（不覆盖已安装记录）
-            saveMarketIndex({ plugins: remote.plugins.map(normalizePluginEntry), updatedAt: remote.updatedAt });
-            send(200, { ok: true, count: remote.plugins.length, updatedAt: remote.updatedAt });
+            // 远程目录单独缓存，绝不影响本地已安装记录
+            try {
+              fs.writeFileSync(MARKET_REMOTE_CACHE_FILE, JSON.stringify(remote, null, 2), 'utf-8');
+            } catch {}
+            send(200, { ok: true, count: Array.isArray(remote.plugins) ? remote.plugins.length : 0, updatedAt: remote.updatedAt });
             return;
           }
           const target = String(body.path || '').trim();
@@ -1859,7 +1951,28 @@ export function apply(ctx, config) {
     }),
   );
 
+  // ---- 加载已启用的市场插件：真正执行第三方插件代码 ----
+  marketRuntime.ctx = ctx;
+  (async () => {
+    try {
+      const index = loadMarketIndex();
+      for (const p of index.plugins) {
+        if (!p.enabled) continue;
+        const r = await loadMarketPlugin(p);
+        if (!r.ok) console.warn('[qqbot-skillpack] 市场插件 ' + p.id + ' 加载失败：' + r.error);
+      }
+    } catch (e) {
+      console.warn('[qqbot-skillpack] 市场插件扫描失败：' + String((e && e.message) || e));
+    }
+  })();
+
   return function () {
+    marketRuntime.ctx = null;
+    for (const id of Array.from(marketRuntime.loaded.keys())) disposeMarketPlugin(id);
+    for (const d of marketDisposers) {
+      try { d(); } catch {}
+    }
+    marketDisposers.length = 0;
     for (const d of disposers) {
       try { d(); } catch {}
     }
@@ -1870,7 +1983,7 @@ export function apply(ctx, config) {
 
 const PLUGIN_REPO_OWNER = '347347ae-design';
 const PLUGIN_REPO_NAME = 'QQbot-con';
-const CURRENT_VERSION = '1.19.1';
+const CURRENT_VERSION = '1.20.0';
 
 function parseVersion(v) {
   const parts = String(v || '0').split('.').map(x => parseInt(x, 10) || 0);

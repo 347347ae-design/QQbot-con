@@ -1,4 +1,5 @@
 node_modules/
 data/
+market/
 *.bak-before-parameters-fix
 .DS_Store

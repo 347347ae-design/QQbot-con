@@ -13,13 +13,84 @@ DeepSeek Harness（DSH）插件：可视化配置 OneBot v11 QQ 机器人，按�
 - **保存即生效**：保存群设置后自动同步
   - 本机 AstrBot：直接写 `data/qqbot_groups.json`，必要时自动安装控制插件
   - 远程服务器：通过 SSH 写规则文件
+- **发送测试消息**：设置页选群号 + 输入内容，直接通过 OneBot HTTP 发消息验证连通性
+- **机器人插件市场**：从 Git 仓库或本地目录安装第三方 QQBot 插件，支持启用/禁用/卸载，**安装即生效无需重启**
 - **自动检查更新**：设置页可检查 GitHub 仓库最新版本
+
+## 机器人插件市场
+
+### 使用
+
+设置页 →「机器人插件市场」：
+
+- 粘贴 Git 地址（如 `https://github.com/you/qqbot-plugin-foo.git`）或本地目录，点「安装插件」
+- 已安装插件可「禁用 / 启用 / 卸载」
+- 「同步远程市场」拉取目录（`catalog.json`）里可安装的插件
+
+安装目录：插件自身目录下的 `market/<pluginId>/`；已安装清单在 `market/index.json`。
+
+### 开发自己的插件
+
+1. 建一个仓库（或本地目录），根目录放 `manifest.json`：
+
+```json
+{
+  "id": "qqbot-plugin-foo",
+  "name": "示例插件",
+  "version": "1.0.0",
+  "description": "这个插件做什么",
+  "author": "你的名字",
+  "entry": "index.js"
+}
+```
+
+2. 入口文件导出 `apply(ctx, config)`，返回清理函数（可选）：
+
+```js
+export function apply(ctx, config) {
+  const dispose = ctx.tools.register({
+    name: 'foo_tool',
+    title: '示例工具',
+    description: '做点什么',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+    output: {
+      schema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false },
+      render: (_a, v) => [{ type: 'text', text: v.text }],
+    },
+    execute: async () => ({ text: 'hello from foo' }),
+  });
+  return () => dispose();
+}
+export default { apply };
+```
+
+3. 参考完整示例：[examples/qqbot-plugin-hello](examples/qqbot-plugin-hello)
+
+4. 想让别人在市场里一键安装，把插件登记到本仓库根目录的 `catalog.json`（提交 PR 即可）：
+
+```json
+{
+  "plugins": [
+    { "id": "qqbot-plugin-foo", "name": "示例插件", "version": "1.0.0",
+      "description": "这个插件做什么", "author": "你的名字",
+      "source": "https://github.com/you/qqbot-plugin-foo.git" }
+  ]
+}
+```
+
+> 市场插件以宿主同权限运行，请只安装可信来源的插件。
 
 ## 安装（DSH）
 
 1. 把本目录放到一个本地路径，例如 `D:\plugins\qqbot-skillpack-plugin`
 2. 在 DSH 中用插件管理器安装该目录（Profile → 插件 → 安装本地 bundle）
 3. 重启或刷新后，设置页出现「QQBot 技能包」
+
+也可以直接把仓库地址交给 DSH 插件管理器：
+
+```
+https://github.com/347347ae-design/QQbot-con.git
+```
 
 ## 服务端（AstrBot）
 
@@ -48,7 +119,7 @@ systemctl restart astrbot
 
 - `POST /get_login_info`
 - `GET /get_group_list`
-- `POST /send_group_msg`（后续消息收发用）
+- `POST /send_group_msg`
 
 ## License
 

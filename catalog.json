@@ -1,0 +1,13 @@
+{
+  "updatedAt": "2026-11-06T09:50:00Z",
+  "plugins": [
+    {
+      "id": "qqbot-plugin-hello",
+      "name": "示例：回声插件",
+      "version": "1.0.0",
+      "description": "演示市场插件：注册一个 hello_echo 工具，把输入文本原样返回。",
+      "author": "QQbot-con",
+      "source": "examples/qqbot-plugin-hello"
+    }
+  ]
+}

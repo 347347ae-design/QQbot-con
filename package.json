@@ -1,6 +1,6 @@
 {
   "name": "@local/qqbot-skillpack",
-  "version": "1.19.1",
+  "version": "1.20.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -16,6 +16,8 @@
     "locale/en.json",
     "locale/zh.json",
     "icon.svg",
+    "catalog.json",
+    "examples/**",
     "server/astrbot_plugin_dsh_control/main.py",
     "server/astrbot_plugin_dsh_control/metadata.yaml"
   ],
