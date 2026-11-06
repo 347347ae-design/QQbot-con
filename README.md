@@ -27,7 +27,19 @@ DeepSeek Harness（DSH）插件：可视化配置 OneBot v11 QQ 机器人，按�
 - 已安装插件可「禁用 / 启用 / 卸载」
 - 「同步远程市场」拉取目录（`catalog.json`）里可安装的插件
 
-安装目录：插件自身目录下的 `market/<pluginId>/`；已安装清单在 `market/index.json`。
+### 已内置示例插件
+
+- `examples/qqbot-plugin-hello` —— 示例：回声插件（`hello_echo`）
+- `examples/qqbot-plugin-yanmao` —— 烟猫运维助手（`yanmao_status` / `yanmao_groups` / `yanmao_send_group`）
+- `examples/qqbot-plugin-yanmao-functions` —— 烟猫功能整合包（19 个工具），封装烟猫 AstrBot 的核心功能性插件：
+  - **Steam**：`yanmao_steam_status`（在线面板）、`yanmao_steam_bind`（绑定 Steam 账号）、`yanmao_steam_library`（游戏库/时长）、`yanmao_steam_menu`
+  - **课表**：`yanmao_class_timetable`（查课表）、`yanmao_class_reminder`（未来两天提醒）、`yanmao_class_import`（导入课表）、`yanmao_class_vacation`（设置假期）
+  - **VJudge**：`yanmao_vjudge_contest`（比赛赛况）、`yanmao_vjudge_progress`（题单进度）、`yanmao_vjudge_left`（退出名单）、`yanmao_vjudge_done`（完成名单）
+  - **辅助**：`yanmao_freechat_config`（免@配置）、`yanmao_shutup`（闭嘴开关）、`yanmao_identifier`（身份前缀）、`yanmao_split`（分条发送）
+
+使用方法：在 DSH 对话中直接调用上述工具名（如 `yanmao_status`），或在设置页「机器人插件市场」→ 安装本地目录 `examples/qqbot-plugin-yanmao-functions` 后启用。配置项 `endpoint`（OneBot HTTP 端点，如 `http://100.125.255.91:3000`）和 `token` 可在市场插件 `config` 里预置，也可在每次调用时传入。
+
+> 蒸汽（Steam）查询需配置 `steam.apiKey`（Steam Web API Key）与 `steam.watchList`（steamid64 -> 显示名）；课表/VJudge 等按各自 `config` 字段配置。所有持久化状态存放于插件目录下的 `data/` 子目录。
 
 ### 开发自己的插件
 
