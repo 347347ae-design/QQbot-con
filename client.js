@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 		const React = require("react");
 		const h = React.createElement;
-		const CURRENT_VERSION = '1.18.2';
+		const CURRENT_VERSION = '1.18.3';
 
 		const API = "/qqbot-skillpack/api/v18";
 
@@ -63,7 +63,8 @@ window.__ModuleLoader__.load({
 			const [promptText, setPromptText] = React.useState("");
 			const [updateInfo, setUpdateInfo] = React.useState(null);
 			const [updateBusy, setUpdateBusy] = React.useState(false);
-			const [sendMsg, setSendMsg] = React.useState("");
+			const [sendGroupId, setSendGroupId] = React.useState("");
+			const [sendContent, setSendContent] = React.useState("");
 			const [sendMsgBusy, setSendMsgBusy] = React.useState(false);
 			const [sendMsgResult, setSendMsgResult] = React.useState(null);
 
@@ -126,14 +127,10 @@ window.__ModuleLoader__.load({
 			};
 
 			const sendGroupMsg = async () => {
-				const g = String(bot.selfQQ || "").trim();
-				const targetGroup = String(sendMsg).trim();
-				if (!targetGroup) { setMsg("请输入群号或消息内容"); setFailed(true); return; }
-				// 支持 "群号||消息" 格式，或先选群再发
-				const parts = targetGroup.split("||").map((x) => x.trim());
-				const targetId = parts[0] || "";
-				const content = parts[1] || "";
-				if (!targetId || !content) { setMsg("格式：群号||消息内容（例：1041543038||你好）"); setFailed(true); return; }
+				const targetId = String(sendGroupId || "").trim();
+				const content = String(sendContent || "").trim();
+				if (!targetId) { setMsg("请选择一个群号"); setFailed(true); return; }
+				if (!content) { setMsg("请输入消息内容"); setFailed(true); return; }
 				setSendMsgBusy(true);
 				try {
 					const r = await post({
@@ -146,6 +143,7 @@ window.__ModuleLoader__.load({
 					if (!r || r.ok !== true) throw new Error((r && r.error) || "发送失败");
 					setMsg("已发送到群 " + targetId + "：" + content);
 					setFailed(false);
+					setSendContent("");
 				} catch (e) {
 					setMsg("发送失败：" + String((e && e.message) || e));
 					setFailed(true);
@@ -517,16 +515,26 @@ window.__ModuleLoader__.load({
 
 				h("h2", { style: S.h2 }, "发送测试消息"),
 				h("div", { style: S.card },
-					h("p", { style: S.p }, "直接通过 OneBot HTTP 发送消息到指定群，用于验证连接是否可用。格式：群号||消息内容"),
+					h("p", { style: S.p }, "直接通过 OneBot HTTP 发送消息到指定群，用于验证连接是否可用。"),
 					h("div", { style: { ...S.row, gap: 10, marginBottom: 8 } },
+						h("select", {
+							value: sendGroupId,
+							style: { ...S.input, flex: 1, minWidth: 220 },
+							onChange: (e) => setSendGroupId(e.target.value),
+						},
+							h("option", { value: "" }, "选择群号……"),
+							Array.from(new Set(
+								discovered.map((g) => String(g.id)).concat(groups.map((g) => String(g.groupId)))
+							)).map((id) => h("option", { key: id, value: id }, id)),
+						),
 						h("input", {
 							type: "text",
-							value: sendMsg,
-							placeholder: "例如：1041543038||你好，这是测试消息",
+							value: sendContent,
+							placeholder: "消息内容",
 							style: { ...S.input, flex: 1 },
-							onChange: (e) => setSendMsg(e.target.value),
+							onChange: (e) => setSendContent(e.target.value),
 						}),
-						h("button", { type: "button", style: S.btnPrimary, disabled: sendMsgBusy || !bot.httpEndpoint, onClick: sendGroupMsg },
+						h("button", { type: "button", style: S.btnPrimary, disabled: sendMsgBusy || !bot.httpEndpoint || !sendGroupId || !sendContent, onClick: sendGroupMsg },
 							sendMsgBusy ? "发送中…" : "发送消息",
 						),
 						!bot.httpEndpoint ? h("span", { style: { fontSize: 12.5, color: "#6b7280" } }, "未配置端点") : null,
