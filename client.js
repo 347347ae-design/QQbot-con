@@ -67,6 +67,11 @@ window.__ModuleLoader__.load({
 			const [sendContent, setSendContent] = React.useState("");
 			const [sendMsgBusy, setSendMsgBusy] = React.useState(false);
 			const [sendMsgResult, setSendMsgResult] = React.useState(null);
+			const [marketPlugins, setMarketPlugins] = React.useState([]);
+			const [remoteMarket, setRemoteMarket] = React.useState(null);
+			const [marketBusy, setMarketBusy] = React.useState(false);
+			const [marketMsg, setMarketMsg] = React.useState("");
+			const [installSpec, setInstallSpec] = React.useState("");
 
 			const reload = async () => {
 				try {
@@ -152,7 +157,93 @@ window.__ModuleLoader__.load({
 				}
 			};
 
-			React.useEffect(() => { reload().then((s) => { if (s) loadGroups(s); }); checkUpdate(); }, []);
+			const loadMarket = async () => {
+				setMarketBusy(true);
+				try {
+					const r = await post({ action: "market_list" });
+					if (!r || r.ok !== true) throw new Error((r && r.error) || "获取市场失败");
+					setMarketPlugins(Array.isArray(r.plugins) ? r.plugins : []);
+					setRemoteMarket(r.remote || null);
+				} catch (e) {
+					setMarketMsg("获取市场失败：" + String((e && e.message) || e));
+				} finally {
+					setMarketBusy(false);
+				}
+			};
+
+			const installPlugin = async () => {
+				const spec = String(installSpec || "").trim();
+				if (!spec) { setMarketMsg("请输入 Git 仓库地址"); return; }
+				setMarketBusy(true);
+				try {
+					const r = await post({ action: "market_install", spec });
+					if (!r || r.ok !== true) throw new Error((r && r.error) || "安装失败");
+					setMarketMsg("✅ 已安装：" + (r.plugin && r.plugin.name));
+					setInstallSpec("");
+					await loadMarket();
+				} catch (e) {
+					setMarketMsg("安装失败：" + String((e && e.message) || e));
+				} finally {
+					setMarketBusy(false);
+				}
+			};
+
+			const installPluginBySpec = async (spec, pluginMeta) => {
+				setMarketBusy(true);
+				try {
+					const r = await post({ action: "market_install", spec });
+					if (!r || r.ok !== true) throw new Error((r && r.error) || "安装失败");
+					setMarketMsg("✅ 已安装：" + (pluginMeta.name || r.plugin && r.plugin.name));
+					await loadMarket();
+				} catch (e) {
+					setMarketMsg("安装失败：" + String((e && e.message) || e));
+				} finally {
+					setMarketBusy(false);
+				}
+			};
+
+			const removePlugin = async (id) => {
+				setMarketBusy(true);
+				try {
+					const r = await post({ action: "market_remove", id });
+					if (!r || r.ok !== true) throw new Error((r && r.error) || "卸载失败");
+					setMarketMsg("🗑️ 已卸载：" + id);
+					await loadMarket();
+				} catch (e) {
+					setMarketMsg("卸载失败：" + String((e && e.message) || e));
+				} finally {
+					setMarketBusy(false);
+				}
+			};
+
+			const togglePlugin = async (id, enabled) => {
+				setMarketBusy(true);
+				try {
+					const r = await post({ action: "market_toggle", id, enabled: enabled === true });
+					if (!r || r.ok !== true) throw new Error((r && r.error) || "切换失败");
+					await loadMarket();
+				} catch (e) {
+					setMarketMsg("切换失败：" + String((e && e.message) || e));
+				} finally {
+					setMarketBusy(false);
+				}
+			};
+
+			const syncRemoteMarket = async () => {
+				setMarketBusy(true);
+				try {
+					const r = await post({ action: "market_sync" });
+					if (!r || r.ok !== true) throw new Error((r && r.error) || "同步失败");
+					setMarketMsg("🔄 已同步远程市场：" + (r.count || 0) + " 个插件");
+					await loadMarket();
+				} catch (e) {
+					setMarketMsg("同步失败：" + String((e && e.message) || e));
+				} finally {
+					setMarketBusy(false);
+				}
+			};
+
+			React.useEffect(() => { reload().then((s) => { if (s) loadGroups(s); }); checkUpdate(); loadMarket(); }, []);
 
 			const bot = state.bot || {};
 			const remote = state.remote || {};
@@ -554,6 +645,77 @@ window.__ModuleLoader__.load({
 						h("button", { type: "button", style: S.btn, onClick: applyRemote, disabled: busy }, busy ? "同步中…" : "重新同步"),
 						h("span", { style: { fontSize: 12.5, color: "#6b7280" } }, "一般不需要手动点；保存失败或改了服务器时可用"),
 					),
+				),
+
+				h("h2", { style: S.h2 }, "机器人插件市场"),
+				h("div", { style: S.card },
+					h("p", { style: S.p }, "安装/启用/禁用/卸载 QQBot 机器人插件。其他开发者可提供含 manifest.json 的 Git 仓库地址进行安装。"),
+					h("div", { style: { ...S.row, gap: 10, marginBottom: 10 } },
+						h("input", {
+							type: "text",
+							value: installSpec,
+							placeholder: "Git 仓库地址，如 https://github.com/xxx/qqbot-plugin-foo.git",
+							style: { ...S.input, flex: 1 },
+							onChange: (e) => setInstallSpec(e.target.value),
+						}),
+						h("button", { type: "button", style: S.btnPrimary, disabled: marketBusy || !installSpec, onClick: installPlugin },
+							marketBusy ? "安装中…" : "安装插件",
+						),
+						h("button", { type: "button", style: S.btn, onClick: syncRemoteMarket, disabled: marketBusy },
+							marketBusy ? "同步中…" : "同步远程市场",
+						),
+						!installSpec ? h("span", { style: { fontSize: 12.5, color: "#6b7280" } }, "粘贴 Git 地址后点安装") : null,
+					),
+					marketMsg ? h("div", { style: marketMsg.startsWith("❌") || marketMsg.startsWith("🗑️") || marketMsg.startsWith("🔄") || marketMsg.startsWith("✅") ? marketMsg.startsWith("❌") || marketMsg.startsWith("安装失败") || marketMsg.startsWith("卸载失败") || marketMsg.startsWith("切换失败") || marketMsg.startsWith("获取市场失败") || marketMsg.startsWith("同步失败") ? S.err : S.ok : S.ok }, marketMsg) : null,
+					h("h3", { style: { margin: "16px 0 8px", fontSize: 14, color: "#374151" } }, "已安装插件"),
+					myPlugins.length === 0 ? h("p", { style: { color: "#6b7280", fontSize: 13 } }, "暂无已安装插件。") :
+						h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+							myPlugins.map((p) => h("div", { key: p.id, style: { border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", background: "#fff" } },
+								h("div", { style: { ...S.row, gap: 10, marginBottom: 6 } },
+									h("div", null,
+										h("div", { style: { fontWeight: 600, color: "#111827" } }, p.name + " · v" + p.version),
+										h("div", { style: { fontSize: 12, color: "#6b7280" } }, p.id + " ｜ " + p.author + " ｜ " + (p.enabled ? "已启用" : "已禁用")),
+									),
+									h("div", { style: { display: "flex", gap: 6 } },
+										h("button", { type: "button", style: S.btnPrimary, disabled: marketBusy, onClick: () => togglePlugin(p.id, !p.enabled) },
+											p.enabled ? "禁用" : "启用",
+										),
+										h("button", { type: "button", style: S.btnDanger, disabled: marketBusy, onClick: () => removePlugin(p.id) },
+											"卸载",
+										),
+										p.source ? h("button", { type: "button", style: S.btn, onClick: () => { /* 可打开源 */ } },
+											"源",
+										) : null,
+									),
+								),
+								p.description ? h("div", { style: { fontSize: 12.5, color: "#374151", marginTop: 4 } }, p.description) : null,
+								p.manifest && p.manifest.files ? h("div", { style: { fontSize: 11.5, color: "#6b7280", marginTop: 4 } },
+									"文件：" + Array.isArray(p.manifest.files) ? p.manifest.files.map((f) => f.name + " (" + Math.round(f.size / 1024) + "KB)").join("，") : "",
+								) : null,
+							)),
+						),
+					h("h3", { style: { margin: "20px 0 8px", fontSize: 14, color: "#374151" } }, "远程市场插件（可安装）"),
+					remotePlugins.length === 0 ? h("p", { style: { color: "#6b7280", fontSize: 13 } }, "暂无远程插件，或无法连接远程索引。") :
+						h("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+							remotePlugins.map((p) => {
+								const already = myPlugins.some((m) => m.id === p.id);
+								return h("div", { key: p.id, style: { border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", background: "#fff" } },
+									h("div", { style: { ...S.row, gap: 10, marginBottom: 6 } },
+										h("div", null,
+											h("div", { style: { fontWeight: 600, color: "#111827" } }, p.name + " · v" + p.version),
+											h("div", { style: { fontSize: 12, color: "#6b7280" } }, p.id + " ｜ " + p.author),
+										),
+										h("div", { style: { display: "flex", gap: 6 } },
+											already ? h("button", { type: "button", style: S.btn, disabled: true }, "已安装") :
+												h("button", { type: "button", style: S.btnPrimary, disabled: marketBusy, onClick: () => installPluginBySpec(p.source || "", p) },
+													"安装",
+												),
+										),
+									),
+									p.description ? h("div", { style: { fontSize: 12.5, color: "#374151", marginTop: 4 } }, p.description) : null,
+								);
+							}),
+						),
 				),
 			);
 		}

@@ -65,6 +65,10 @@ export const Config = Schema ? Schema.object({
 
 const FEATURE_NAMES = ['steam', 'classReminder', 'vjudgeContest', 'vjudgeProgress', 'freechat', 'shutup'];
 
+const PLUGIN_MARKET_DIR = path.join(PLUGIN_DIR, 'market');
+const MARKET_INDEX_FILE = path.join(PLUGIN_MARKET_DIR, 'index.json');
+const MARKET_REMOTE_INDEX_URL = 'https://raw.githubusercontent.com/347347ae-design/QQbot-market/main/index.json';
+
 const DEFAULTS = {
   enabled: true,
   bot: { name: '烟猫', workspacePath: '', httpEndpoint: '', selfQQ: 0, token: '' },
@@ -117,6 +121,90 @@ function makeOutput() {
       return [{ type: 'text', text: value.text }];
     },
   };
+}
+
+// ---------- 插件市场：Host 侧管理 QQBot 插件的安装/启用/禁用/卸载 ----------
+
+function ensureMarketDir() {
+  try { fs.mkdirSync(PLUGIN_MARKET_DIR, { recursive: true }); } catch {}
+}
+
+function loadMarketIndex() {
+  ensureMarketDir();
+  try {
+    const raw = fs.readFileSync(MARKET_INDEX_FILE, 'utf-8');
+    const j = JSON.parse(raw);
+    if (j && Array.isArray(j.plugins)) return j;
+  } catch {}
+  return { plugins: [], updatedAt: new Date().toISOString() };
+}
+
+function saveMarketIndex(index) {
+  ensureMarketDir();
+  try {
+    fs.writeFileSync(MARKET_INDEX_FILE + '.tmp', JSON.stringify(index, null, 2), 'utf-8');
+    fs.renameSync(MARKET_INDEX_FILE + '.tmp', MARKET_INDEX_FILE);
+  } catch {}
+}
+
+function pluginDir(pluginId) {
+  return path.join(PLUGIN_MARKET_DIR, pluginId);
+}
+
+async function fetchRemoteMarketIndex() {
+  try {
+    const r = await fetch(MARKET_REMOTE_INDEX_URL, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (j && Array.isArray(j.plugins)) return j;
+  } catch {}
+  return null;
+}
+
+function normalizePluginEntry(p) {
+  return {
+    id: String(p.id || '').replace(/[^a-z0-9_-]/gi, '_'),
+    name: String(p.name || p.id || ''),
+    version: String(p.version || '0.0.0'),
+    description: String(p.description || ''),
+    author: String(p.author || 'unknown'),
+    source: String(p.source || ''),
+    enabled: Boolean(p.enabled),
+    installedAt: p.installedAt || new Date().toISOString(),
+  };
+}
+
+function loadInstalledPlugins() {
+  const index = loadMarketIndex();
+  const out = [];
+  for (const p of index.plugins) {
+    const d = pluginDir(p.id);
+    out.push({
+      ...normalizePluginEntry(p),
+      installed: fs.existsSync(path.join(d, 'manifest.json')) || fs.existsSync(d),
+      manifest: (() => {
+        try {
+          const m = readJsonFile(path.join(d, 'manifest.json'), null);
+          return m;
+        } catch { return null; }
+      })(),
+    });
+  }
+  return out;
+}
+
+function validatePluginFiles(dir) {
+  const files = [];
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const full = path.join(dir, entry.name);
+      const stat = fs.statSync(full);
+      if (stat.size > 2 * 1024 * 1024) continue; // 2MB 上限
+      files.push({ name: entry.name, size: stat.size });
+    }
+  } catch {}
+  return files;
 }
 
 // ---------- 工作区扫描：识别机器人并提取可回填字段 ----------
@@ -1554,6 +1642,90 @@ export function apply(ctx, config) {
             } catch (e) {
               send(200, { ok: false, error: '发送失败：' + String((e && e.message) || e) });
             }
+            return;
+          }
+          if (action === 'market_list') {
+            const plugins = loadInstalledPlugins();
+            const remote = await fetchRemoteMarketIndex();
+            send(200, {
+              ok: true,
+              plugins,
+              remote: remote ? { plugins: remote.plugins.map(normalizePluginEntry), updatedAt: remote.updatedAt } : null,
+            });
+            return;
+          }
+          if (action === 'market_install') {
+            const spec = String(body.spec || '').trim();
+            if (!spec) { send(400, { ok: false, error: 'spec 不能为空' }); return; }
+            let manifest = null;
+            let files = [];
+            let pluginId = '';
+            let name = '', version = '0.0.0', description = '', author = 'unknown';
+            if (/^https?:\/\/|\.git$/i.test(spec) || spec.includes('github.com')) {
+              // 从 Git URL 安装：使用 git clone 到临时目录，读 manifest.json
+              const tmp = path.join(os.tmpdir(), 'qqbot-market-' + Date.now());
+              try {
+                await runCommand('git', ['clone', '--depth', '1', spec, tmp]);
+                manifest = readJsonFile(path.join(tmp, 'manifest.json'), null);
+                if (!manifest) { send(200, { ok: false, error: '仓库中没有 manifest.json' }); return; }
+                pluginId = String(manifest.id || manifest.name || '').replace(/[^a-z0-9_-]/gi, '_');
+                if (!pluginId) { send(200, { ok: false, error: 'manifest.json 缺少 id/name' }); return; }
+                const targetDir = pluginDir(pluginId);
+                if (fs.existsSync(targetDir)) { send(200, { ok: false, error: '插件已安装：' + pluginId }); return; }
+                fs.cpSync(tmp, targetDir, { recursive: true, dereference: true });
+                files = validatePluginFiles(targetDir);
+                name = manifest.name || pluginId;
+                version = manifest.version || '0.0.0';
+                description = manifest.description || '';
+                author = manifest.author || 'unknown';
+              } finally {
+                try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+              }
+            } else {
+              send(400, { ok: false, error: '暂仅支持 Git URL 安装，如 https://github.com/xxx/yyy.git' });
+              return;
+            }
+            const entry = normalizePluginEntry({ id: pluginId, name, version, description, author, source: spec, enabled: true });
+            const index = loadMarketIndex();
+            if (index.plugins.some((p) => p.id === pluginId)) { send(200, { ok: false, error: '插件已存在：' + pluginId }); return; }
+            index.plugins.push({ ...entry, installedAt: new Date().toISOString() });
+            saveMarketIndex(index);
+            send(200, { ok: true, plugin: { ...entry, installed: true, manifest }, files });
+            return;
+          }
+          if (action === 'market_remove') {
+            const pluginId = String(body.id || '').trim();
+            if (!pluginId) { send(400, { ok: false, error: 'id 不能为空' }); return; }
+            const targetDir = pluginDir(pluginId);
+            let removed = false;
+            if (fs.existsSync(targetDir)) {
+              try { fs.rmSync(targetDir, { recursive: true, force: true }); removed = true; } catch {}
+            }
+            const index = loadMarketIndex();
+            const before = index.plugins.length;
+            index.plugins = index.plugins.filter((p) => p.id !== pluginId);
+            if (index.plugins.length < before) saveMarketIndex(index);
+            send(200, { ok: true, removed, remaining: index.plugins.length });
+            return;
+          }
+          if (action === 'market_toggle') {
+            const pluginId = String(body.id || '').trim();
+            const enabled = body.enabled === true;
+            if (!pluginId) { send(400, { ok: false, error: 'id 不能为空' }); return; }
+            const index = loadMarketIndex();
+            const p = index.plugins.find((x) => x.id === pluginId);
+            if (!p) { send(400, { ok: false, error: '插件未安装：' + pluginId }); return; }
+            p.enabled = enabled;
+            saveMarketIndex(index);
+            send(200, { ok: true, id: pluginId, enabled });
+            return;
+          }
+          if (action === 'market_sync') {
+            const remote = await fetchRemoteMarketIndex();
+            if (!remote) { send(200, { ok: false, error: '无法获取远程市场索引' }); return; }
+            // 把远程索引写入本地作为可选源（不覆盖已安装记录）
+            saveMarketIndex({ plugins: remote.plugins.map(normalizePluginEntry), updatedAt: remote.updatedAt });
+            send(200, { ok: true, count: remote.plugins.length, updatedAt: remote.updatedAt });
             return;
           }
           const target = String(body.path || '').trim();
