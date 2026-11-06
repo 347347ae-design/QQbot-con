@@ -16,6 +16,14 @@
       "description": "面向烟猫机器人的 DSH 运维插件：检查 OneBot 连通性、查看群列表、发送测试消息（yanmao_status/yanmao_groups/yanmao_send_group）。",
       "author": "QQbot-con",
       "source": "examples/qqbot-plugin-yanmao"
+    },
+    {
+      "id": "qqbot-plugin-yanmao-functions",
+      "name": "烟猫功能整合包",
+      "version": "1.0.0",
+      "description": "烟猫核心功能性插件的 DSH 市场封装：Steam 播报/绑定/库查、课表提醒、VJudge 比赛/题单进度、免@聊天、闭嘴开关、身份标识、分条发送。",
+      "author": "QQbot-con",
+      "source": "examples/qqbot-plugin-yanmao-functions"
     }
   ]
 }

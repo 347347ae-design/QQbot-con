@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 		const React = require("react");
 		const h = React.createElement;
-		const CURRENT_VERSION = '1.21.0';
+		const CURRENT_VERSION = '1.22.0';
 
 		const API = "/qqbot-skillpack/api/v18";
 

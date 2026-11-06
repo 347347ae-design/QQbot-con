@@ -1,0 +1,79 @@
+{
+  "id": "qqbot-plugin-yanmao-functions",
+  "name": "烟猫功能整合包",
+  "version": "1.0.0",
+  "description": "将烟猫机器人的核心功能性插件封装为 DSH 市场插件：Steam 播报/绑定/库查、课表提醒、VJudge 赛况/题单进度、免@聊天、闭嘴开关、身份标识、分条发送。安装即用，通过 OneBot v11 HTTP 调用，无需重启 AstrBot。",
+  "author": "QQbot-con",
+  "entry": "index.js",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "endpoint": { "type": "string", "description": "OneBot v11 HTTP 端点，如 http://100.125.255.91:3000" },
+      "token": { "type": "string", "description": "OneBot HTTP 访问 token（可留空）" },
+      "steam": {
+        "type": "object",
+        "description": "Steam 监控配置",
+        "properties": {
+          "apiKey": { "type": "string", "description": "Steam Web API Key（必填，用于查询玩家/游戏库）" },
+          "watchList": { "type": "object", "description": "群播报名单：steamid64 -> 显示名" },
+          "privateList": { "type": "object", "description": "私发名单：steamid64 -> 显示名" },
+          "reportGroup": { "type": "number", "description": "自动播报群号" },
+          "bindGroups": { "type": "array", "items": { "type": "number" }, "description": "绑定指令生效的群号" }
+        }
+      },
+      "classReminder": {
+        "type": "object",
+        "description": "课表提醒配置",
+        "properties": {
+          "groupId": { "type": "number", "description": "提醒/查询群号" },
+          "leadMin": { "type": "number", "description": "提前分钟数，默认 10" },
+          "week1Monday": { "type": "string", "description": "第1教学周周一，如 2026-08-31" },
+          "schedules": { "type": "object", "description": "每人课表：QQ号 -> 课表条目" },
+          "builtinHolidays": { "type": "array", "description": "法定节假日 [起始, 结束, 备注]" }
+        }
+      },
+      "vjudgeContest": {
+        "type": "object",
+        "description": "VJudge 比赛监控配置",
+        "properties": {
+          "contestId": { "type": "string", "description": "比赛 ID" },
+          "targetUmo": { "type": "string", "description": "播报群 UMO，如 qq_3601924260:GroupMessage:123456789" },
+          "monitorEnabled": { "type": "boolean", "description": "是否开启后台监控" },
+          "pollIntervalSec": { "type": "number", "description": "轮询间隔（秒）" },
+          "reportIntervalSec": { "type": "number", "description": "播报间隔（秒）" }
+        }
+      },
+      "vjudgeProgress": {
+        "type": "object",
+        "description": "VJudge 题单进度配置",
+        "properties": {
+          "workbookId": { "type": "string", "description": "题单 ID" },
+          "totalProblems": { "type": "number", "description": "总题数" },
+          "rosterIntervalSec": { "type": "number", "description": "名单追踪间隔（秒）" },
+          "missThreshold": { "type": "number", "description": "连续缺席几次判定退出" },
+          "guardRatio": { "type": "number", "description": "保护比例" }
+        }
+      },
+      "freechat": {
+        "type": "object",
+        "description": "免@自动聊天配置",
+        "properties": {
+          "groups": { "type": "array", "items": { "type": "number" }, "description": "免@群号列表" },
+          "probability": { "type": "number", "description": "常规接话概率" },
+          "mentionProbability": { "type": "number", "description": "点名接话概率" },
+          "cooldownSec": { "type": "number", "description": "常规冷却（秒）" },
+          "mentionCooldownSec": { "type": "number", "description": "点名冷却（秒）" }
+        }
+      },
+      "shutup": {
+        "type": "object",
+        "description": "闭嘴开关配置",
+        "properties": {
+          "muteSeconds": { "type": "number", "description": "闭嘴时长（秒），默认 600" },
+          "triggerKeywords": { "type": "array", "items": { "type": "string" }, "description": "触发词，默认 ['闭嘴','别说了','安静']" }
+        }
+      }
+    },
+    "additionalProperties": false
+  }
+}
