@@ -6,7 +6,7 @@ window.__ModuleLoader__.load({
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 		const React = require("react");
 		const h = React.createElement;
-		const CURRENT_VERSION = '1.18.3';
+		const CURRENT_VERSION = '1.19.1';
 
 		const API = "/qqbot-skillpack/api/v18";
 
@@ -426,6 +426,8 @@ window.__ModuleLoader__.load({
 
 			const qqShow = Number(bot.selfQQ) || 0;
 			const nameShow = bot.name || "";
+			const myPlugins = Array.isArray(marketPlugins) ? marketPlugins : [];
+			const remotePlugins = Array.isArray(remoteMarket && remoteMarket.plugins) ? remoteMarket.plugins : [];
 
 			return h("div", { style: S.wrap },
 				h("div", { style: S.banner }, "QQBot 技能包 · 机器人属性与固定群触发方式"),

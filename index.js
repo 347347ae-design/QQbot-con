@@ -1870,7 +1870,7 @@ export function apply(ctx, config) {
 
 const PLUGIN_REPO_OWNER = '347347ae-design';
 const PLUGIN_REPO_NAME = 'QQbot-con';
-const CURRENT_VERSION = '1.18.3';
+const CURRENT_VERSION = '1.19.1';
 
 function parseVersion(v) {
   const parts = String(v || '0').split('.').map(x => parseInt(x, 10) || 0);
